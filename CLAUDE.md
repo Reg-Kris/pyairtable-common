@@ -4,12 +4,12 @@
 This is the **shared foundation** for all PyAirtable microservices - providing common models, utilities, middleware, and patterns to ensure consistency across the ecosystem. It's the DRY (Don't Repeat Yourself) principle in action.
 
 ## 🏗️ Current State
-- **Status**: 🚧 Active development
+- **Status**: 🚧 Active development - Core infrastructure complete
 - **Models**: ⚠️ Base models implemented, request/response models needed
-- **Middleware**: ✅ Correlation ID, logging, error handling implemented
+- **Middleware**: ✅ Correlation ID, logging, error handling, rate limiting implemented
 - **Logging**: ✅ Structured logging with correlation IDs implemented
 - **Exceptions**: ✅ Custom exception hierarchy implemented
-- **Utilities**: ❌ Not implemented yet
+- **Utilities**: ✅ Rate limiting, retry logic, circuit breaker implemented
 - **Testing**: ❌ No tests yet
 - **Documentation**: ⚠️ Basic README only
 
@@ -78,16 +78,26 @@ class ChatRequest(BaseModel):
         return v.strip()
 ```
 
-### Phase 2: Middleware ✅ (COMPLETED)
+### Phase 2: Middleware & Utilities ✅ (COMPLETED)
 ```python
-# Usage in microservices:
+# Complete usage in microservices:
 from fastapi import FastAPI
 from pyairtable_common.middleware import setup_middleware
 from pyairtable_common.logging import setup_logging
+from pyairtable_common.utils import airtable_retry, create_airtable_rate_limiter
 
 app = FastAPI()
 setup_logging(service_name="my-service")
 setup_middleware(app)
+
+# Rate limiting
+rate_limiter = await create_airtable_rate_limiter("redis://localhost:6379")
+
+# Retry with circuit breaker
+@airtable_retry(max_attempts=3)
+async def call_airtable_api():
+    # Your Airtable API call here
+    pass
 ```
 
 ### Phase 3: Configuration (Week 3)

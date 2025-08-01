@@ -11,8 +11,16 @@ __author__ = "PyAirtable Team"
 from .models import ChatRequest, ChatResponse
 from .config import get_settings
 
+# Service base class and factory patterns - NEW
+from .service import PyAirtableService, ServiceConfig, create_service, ServiceFactory
+
 __all__ = [
     "ChatRequest",
     "ChatResponse", 
     "get_settings",
+    # Service infrastructure
+    "PyAirtableService",
+    "ServiceConfig", 
+    "create_service",
+    "ServiceFactory",
 ]

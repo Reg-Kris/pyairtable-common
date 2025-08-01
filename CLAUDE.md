@@ -10,7 +10,8 @@ This is the **shared foundation** for all PyAirtable microservices - providing c
 - **Logging**: ✅ Structured logging with correlation IDs implemented
 - **Exceptions**: ✅ Custom exception hierarchy implemented
 - **Utilities**: ✅ Rate limiting, retry logic, circuit breaker implemented
-- **Testing**: ❌ No tests yet
+- **Security**: ✅ Formula injection protection module implemented
+- **Testing**: ⚠️ Security module has test coverage
 - **Documentation**: ⚠️ Basic README only
 
 ## 📦 Package Structure
@@ -22,13 +23,16 @@ pyairtable_common/
 │   ├── base.py         # Base model classes
 │   ├── requests.py     # Common request models
 │   ├── responses.py    # Common response models
-│   └── airtable.py     # Airtable-specific models
+│   ├── airtable.py     # Airtable-specific models
+│   └── conversations.py # ✅ Conversation & session models
 ├── middleware/          # FastAPI middleware
 │   ├── __init__.py
 │   ├── correlation.py  # Request ID tracking
 │   ├── auth.py         # Authentication
 │   ├── logging.py      # Request logging
-│   └── errors.py       # Error handling
+│   ├── errors.py       # Error handling
+│   ├── rate_limit.py   # ✅ Rate limiting middleware
+│   └── setup.py        # ✅ Middleware setup helper
 ├── auth/               # Authentication utilities
 │   ├── __init__.py
 │   ├── api_key.py      # API key validation
@@ -37,22 +41,34 @@ pyairtable_common/
 │   ├── __init__.py
 │   ├── setup.py        # Logger configuration
 │   └── formatters.py   # JSON formatting
-├── metrics/            # Prometheus metrics
+├── metrics/            # ✅ Prometheus metrics
 │   ├── __init__.py
-│   ├── collectors.py   # Metric collectors
-│   └── middleware.py   # Metric middleware
-├── database/           # Database utilities
+│   ├── core.py         # ✅ Core metrics
+│   ├── middleware.py   # ✅ Metric middleware
+│   └── grafana_dashboards.py # ✅ Dashboard configs
+├── database/           # ✅ Database utilities
 │   ├── __init__.py
-│   ├── models.py       # SQLAlchemy base
-│   └── session.py      # Session management
+│   ├── base.py         # ✅ SQLAlchemy base models
+│   ├── engine.py       # ✅ Async engine setup
+│   ├── session.py      # ✅ Session management
+│   └── migrations/     # ✅ Alembic migrations
+├── security/           # ✅ Security utilities
+│   ├── __init__.py
+│   └── airtable_sanitizer.py # ✅ Formula injection protection
 ├── config/             # Configuration
 │   ├── __init__.py
 │   └── settings.py     # Pydantic settings
 ├── utils/              # Common utilities
 │   ├── __init__.py
-│   ├── retry.py        # Retry logic
-│   ├── cache.py        # Caching helpers
+│   ├── retry.py        # ✅ Retry logic with circuit breaker
+│   ├── rate_limiter.py # ✅ Redis-based rate limiting
 │   └── validators.py   # Input validation
+├── resilience/         # ✅ Resilience patterns
+│   ├── __init__.py
+│   └── circuit_breaker.py # ✅ Circuit breaker implementation
+├── http/               # ✅ HTTP utilities
+│   ├── __init__.py
+│   └── resilient_client.py # ✅ Resilient HTTP client with circuit breakers
 └── exceptions/         # Custom exceptions
     ├── __init__.py
     └── errors.py       # Error classes
@@ -219,11 +235,113 @@ def test_chat_request_validation():
 3. **Logging**: Structured logs across services
 4. **Metrics**: Unified Prometheus metrics
 
+## 🔒 Security Module
+
+### Formula Injection Protection
+```python
+from pyairtable_common.security import (
+    sanitize_user_query,
+    sanitize_field_name,
+    build_safe_search_formula,
+    validate_filter_formula,
+    AirtableFormulaInjectionError
+)
+
+# Sanitize user input before formula building
+try:
+    safe_query = sanitize_user_query(user_input)
+    safe_formula = build_safe_search_formula(safe_query, ["Name", "Email"])
+except AirtableFormulaInjectionError as e:
+    # Handle injection attempt
+    logger.error(f"Formula injection blocked: {e}")
+```
+
+**Features:**
+- Query sanitization (escapes quotes, removes dangerous chars)
+- Field name validation (alphanumeric + basic symbols only)
+- Formula validation (whitelist of allowed functions)
+- DoS protection (length limits, nesting depth checks)
+- Comprehensive dangerous pattern detection
+
+## 🔄 Resilience & Circuit Breakers (NEW)
+
+### Circuit Breaker Pattern
+```python
+from pyairtable_common.resilience import CircuitBreaker, CircuitBreakerConfig
+from pyairtable_common.http import get_mcp_client, get_airtable_gateway_client
+
+# Configure circuit breaker for external service
+config = CircuitBreakerConfig(
+    failure_threshold=5,        # Open after 5 consecutive failures
+    success_threshold=3,        # Close after 3 consecutive successes
+    timeout=60,                 # Wait 60s before trying half-open
+    response_timeout=30         # Individual request timeout
+)
+
+# Use resilient HTTP client with circuit breaker protection
+mcp_client = await get_mcp_client("http://mcp-server:8001")
+response = await mcp_client.get("tools")  # Protected by circuit breaker
+```
+
+### FastAPI Circuit Breaker Middleware
+```python
+from pyairtable_common.middleware import add_circuit_breaker_middleware, SERVICE_CONFIGS
+
+# Add circuit breaker protection to all endpoints
+add_circuit_breaker_middleware(app, default_config=SERVICE_CONFIGS["llm_service"])
+
+# Per-endpoint configuration
+endpoint_configs = {
+    "post-chat": CircuitBreakerConfig(failure_threshold=3, timeout=120),
+    "get-tools": CircuitBreakerConfig(failure_threshold=5, timeout=30)
+}
+add_circuit_breaker_middleware(app, endpoint_configs=endpoint_configs)
+```
+
+**Features:**
+- **Service Communication**: Resilient HTTP clients with connection pooling
+- **Automatic Failure Detection**: Opens circuit on consecutive failures, high error rates, or slow responses
+- **Graceful Degradation**: Returns 503 Service Unavailable when circuit is open
+- **Self-Healing**: Automatically tests service recovery with half-open state
+- **Monitoring**: Built-in statistics and health check endpoints
+- **Configurable**: Per-service and per-endpoint configuration options
+
+### Monitoring Circuit Breakers
+```python
+# Get circuit breaker status
+GET /health/circuit-breakers
+{
+    "circuit_breakers": {
+        "mcp-server-tools": {
+            "state": "closed",
+            "stats": {
+                "total_requests": 1250,
+                "success_rate": 0.96,
+                "error_rate": 0.04,
+                "avg_response_time_ms": 145
+            }
+        }
+    },
+    "total_breakers": 3
+}
+
+# Service health checks
+GET /health/services
+{
+    "overall_status": "healthy",
+    "services": {
+        "mcp-server": {"status": "healthy", "response_time_ms": 12},
+        "airtable-gateway": {"status": "healthy", "response_time_ms": 89}
+    }
+}
+```
+
 ## 💡 Development Tips
 1. Keep it simple - utilities should be obvious
 2. Document everything - this is shared code
 3. Version carefully - services depend on this
 4. Test thoroughly - bugs affect all services
+5. Security first - always use sanitization for user inputs
 
 ## 🚨 Critical Rules
 1. **No Breaking Changes**: Use semantic versioning

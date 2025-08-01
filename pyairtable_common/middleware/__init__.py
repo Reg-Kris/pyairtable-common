@@ -11,7 +11,14 @@ from .rate_limit import (
     user_rate_limit_key,
     service_rate_limit_key,
 )
+from .security import (
+    SecurityHeadersMiddleware,
+    setup_security_middleware,
+    constant_time_compare,
+    verify_api_key_secure
+)
 from .setup import setup_middleware
+from .circuit_breaker import CircuitBreakerMiddleware, add_circuit_breaker_middleware, SERVICE_CONFIGS
 
 __all__ = [
     'CorrelationIdMiddleware',
@@ -25,5 +32,12 @@ __all__ = [
     'api_key_rate_limit_key',
     'user_rate_limit_key',
     'service_rate_limit_key',
+    'SecurityHeadersMiddleware',
+    'setup_security_middleware',
+    'constant_time_compare',
+    'verify_api_key_secure',
     'setup_middleware',
+    'CircuitBreakerMiddleware',
+    'add_circuit_breaker_middleware',
+    'SERVICE_CONFIGS',
 ]

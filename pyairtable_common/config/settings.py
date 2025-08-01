@@ -43,10 +43,10 @@ class CommonSettings(BaseSettings):
     metrics_port: int = 9090
     health_check_timeout: int = 5
     
-    # CORS
-    cors_origins: List[str] = ["*"]
+    # CORS - Production should specify exact origins
+    cors_origins: List[str] = ["http://localhost:3000", "http://localhost:8080", "https://yourdomain.com"]
     cors_methods: List[str] = ["GET", "POST", "PUT", "DELETE", "PATCH"]
-    cors_headers: List[str] = ["*"]
+    cors_headers: List[str] = ["Content-Type", "Authorization", "X-API-Key", "X-Request-ID"]
     
     # Database (if used)
     database_pool_size: int = 20
